@@ -1,0 +1,18 @@
+node_modules
+.next
+out
+.vercel
+*.log
+.env*
+.edge-itp-debug/
+.edge-itp-manual/
+.edge-itp-profile/
+.edge-itp-profile-2/
+.edge-itp-profile-3/
+itp_index.js
+itp_tenders.png
+SGC 招标SGC  شركة غاز الجنوب.png
+South_Gas_Company_Tenders_ITP_2026-03-12.csv
+South_Gas_Company_Tenders_ITP_2026-03-12.xml
+run_binance_order.ps1
+trade_btc_long.py
