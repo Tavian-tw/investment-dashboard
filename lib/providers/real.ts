@@ -74,22 +74,41 @@ function toCandle(row: {
   };
 }
 
-function normalizeCandleSeries(candles: Candle[]) {
+function getUtcWeekday(dateString: string) {
+  return new Date(`${dateString}T00:00:00Z`).getUTCDay();
+}
+
+function normalizeCandleSeries(candles: Candle[], interval: "1d" | "1wk") {
   const firstByTime = new Map<string, Candle>();
 
   for (const candle of candles) {
-    const existing = firstByTime.get(candle.time);
-    if (!existing) {
+    // Yahoo sometimes appends a second intraday snapshot for the same date.
+    // Keep the first completed OHLCV bar to avoid inflated volume on duplicate rows.
+    if (!firstByTime.has(candle.time)) {
       firstByTime.set(candle.time, candle);
-      continue;
-    }
-
-    if ((existing.volume == null || existing.volume === 0) && (candle.volume ?? 0) > 0) {
-      firstByTime.set(candle.time, { ...existing, volume: candle.volume });
     }
   }
 
-  return Array.from(firstByTime.values()).sort((left, right) => left.time.localeCompare(right.time));
+  const normalized = Array.from(firstByTime.values()).sort((left, right) => left.time.localeCompare(right.time));
+  if (interval !== "1wk" || normalized.length < 3) {
+    return normalized;
+  }
+
+  const weekdayCounts = new Map<number, number>();
+  for (const candle of normalized.slice(0, -1)) {
+    const weekday = getUtcWeekday(candle.time);
+    weekdayCounts.set(weekday, (weekdayCounts.get(weekday) ?? 0) + 1);
+  }
+
+  const dominantWeekday = Array.from(weekdayCounts.entries())
+    .sort((left, right) => right[1] - left[1])[0]?.[0];
+  const lastCandle = normalized[normalized.length - 1];
+
+  if (dominantWeekday != null && getUtcWeekday(lastCandle.time) !== dominantWeekday) {
+    return normalized.slice(0, -1);
+  }
+
+  return normalized;
 }
 
 async function fetchChartWithFallback(
@@ -141,11 +160,13 @@ async function loadSnapshot(definition: AssetDefinition): Promise<AssetSnapshot>
     dailyResult.chart.quotes
       .map(toCandle)
       .filter((candle): candle is Candle => candle !== null),
+    "1d",
   );
   const weeklyCandles = normalizeCandleSeries(
     weeklyResult.chart.quotes
       .map(toCandle)
       .filter((candle): candle is Candle => candle !== null),
+    "1wk",
   );
 
   if (dailyCandles.length < 2 || weeklyCandles.length < 2) {
