@@ -52,6 +52,7 @@ const EASTMONEY_HEADERS = {
   "User-Agent": "Mozilla/5.0",
   Referer: "https://quote.eastmoney.com/",
 };
+const TURNOVER_100B = 10_000_000_000;
 
 const MOCK_TOP20: MarketTopTurnoverStock[] = [
   { symbol: "300750.SZ", name: "\u5b81\u5fb7\u65f6\u4ee3", industry: "\u9502\u7535\u6c60", turnover: 15_600_000_000, changePercent: 3.12 },
@@ -102,6 +103,20 @@ function getMarketHeatLevel(turnoverOver100BCount: number): AShareHeatSummary["m
   return "cold";
 }
 
+function normalizeIndustry(industry?: string) {
+  const cleaned = industry
+    ?.replace(/[\u3000\s]+/g, "")
+    .replace(/[\u2161\u2162]/g, "")
+    .replace(/\u884c\u4e1a$/u, "")
+    .trim();
+
+  if (!cleaned || cleaned === "-" || cleaned === "--" || cleaned === "\u6682\u65e0") {
+    return "\u5176\u4ed6";
+  }
+
+  return cleaned;
+}
+
 function getHeatSummary(level: AShareHeatSummary["marketHeatLevel"]): string {
   if (level === "hot") {
     return "\u5e02\u573a\u975e\u5e38\u706b\u70ed\uff0c\u6210\u4ea4\u989d\u8fc7\u767e\u4ebf\u4e2a\u80a1\u6570\u91cf\u8f83\u591a\uff0c\u8d44\u91d1\u6d3b\u8dc3\u5ea6\u9ad8\uff0c\u77ed\u7ebf\u53c2\u4e0e\u73af\u5883\u8f83\u597d\uff0c\u53ef\u91cd\u70b9\u5173\u6ce8\u5f3a\u52bf\u4e3b\u7ebf\u884c\u4e1a\u9f99\u5934\u3002";
@@ -116,13 +131,15 @@ function getHeatSummary(level: AShareHeatSummary["marketHeatLevel"]): string {
 }
 
 function createSummary(top20: MarketTopTurnoverStock[]): AShareHeatSummary {
-  const industryRanking = buildIndustryRanking(top20);
+  const turnoverOver100BStocks = top20.filter((stock) => stock.turnover >= TURNOVER_100B);
+  const industryRanking = buildIndustryRanking(turnoverOver100BStocks);
   const top3Industries = industryRanking.slice(0, 3);
-  const turnoverOver100BCount = top20.filter((stock) => stock.turnover >= 10_000_000_000).length;
+  const turnoverOver100BCount = turnoverOver100BStocks.length;
   const marketHeatLevel = getMarketHeatLevel(turnoverOver100BCount);
 
   return {
     top20,
+    turnoverOver100BStocks,
     industryRanking,
     top3Industries,
     turnoverOver100BCount,
@@ -214,7 +231,7 @@ function parseMxTop20(payload: MxDataResponse): MarketTopTurnoverStock[] {
       results.push({
         symbol: resolveAshareSymbol(code.replace(/\.(SH|SZ)$/i, ""), undefined, dto.entityTagDTO?.marketChar),
         name: name.trim(),
-        industry: industry?.trim() || "\u5176\u4ed6",
+        industry: normalizeIndustry(industry),
         turnover,
         changePercent: Number.isFinite(changePercent) ? Number(changePercent.toFixed(2)) : 0,
       });
@@ -241,7 +258,7 @@ function toEastmoneyStock(item: EastmoneyDiffItem): MarketTopTurnoverStock | nul
   return {
     symbol: resolveAshareSymbol(item.f12, item.f13),
     name: item.f14.trim(),
-    industry: item.f100?.trim() || "\u5176\u4ed6",
+    industry: normalizeIndustry(item.f100),
     turnover: Number(item.f6),
     changePercent: typeof item.f3 === "number" ? Number(item.f3.toFixed(2)) : 0,
   };

@@ -17,10 +17,11 @@ const copy = {
   activity: "\u8d44\u91d1\u6d3b\u8dc3\u5ea6",
   over100b: "\u6210\u4ea4\u989d\u524d 20 \u4e2d\uff0c\u6210\u4ea4\u989d\u5927\u4e8e 100 \u4ebf\u7684\u80a1\u7968\u6570\u91cf",
   level: "\u5e02\u573a\u70ed\u5ea6\u7b49\u7ea7\uff1a",
-  top5: "\u884c\u4e1a\u5206\u5e03\u524d\u4e94",
+  top5: "\u6210\u4ea4\u989d\u5927\u4e8e 100 \u4ebf\u7684\u884c\u4e1a\u5206\u5e03\u524d\u4e94",
   summary: "\u5e02\u573a\u7ed3\u8bba",
-  sample: "\u6210\u4ea4\u989d\u6837\u672c\u9884\u89c8",
+  sample: "\u6210\u4ea4\u989d\u5927\u4e8e 100 \u4ebf\u660e\u7ec6",
   stocks: "\u4ee3\u8868\u80a1",
+  empty: "\u6210\u4ea4\u989d\u524d 20 \u4e2d\u6682\u65e0\u6210\u4ea4\u989d\u5927\u4e8e 100 \u4ebf\u7684\u80a1\u7968",
 };
 
 function levelLabel(level: AShareHeatSummary["marketHeatLevel"]) {
@@ -71,7 +72,7 @@ export function AShareHeatPanel({ summary, generatedAt, provider }: AShareHeatPa
           </div>
           <div className="space-y-3">
             {summary.top3Industries.map((item, index) => {
-              const stocks = summary.top20
+              const stocks = summary.turnoverOver100BStocks
                 .filter((stock) => stock.industry === item.industry)
                 .sort((left, right) => right.turnover - left.turnover)
                 .slice(0, 3);
@@ -129,15 +130,19 @@ export function AShareHeatPanel({ summary, generatedAt, provider }: AShareHeatPa
           <div className="mt-5 rounded-2xl bg-white/5 p-4">
             <p className="text-sm font-medium text-white">{copy.sample}</p>
             <div className="mt-3 space-y-2 text-sm text-stone-300">
-              {summary.top20.slice(0, 5).map((stock) => (
-                <div key={stock.symbol} className="grid grid-cols-[minmax(0,1fr)_72px_62px] items-center gap-3">
-                  <span className="truncate">{stock.name}</span>
-                  <span className="text-right">{formatTurnover(stock.turnover)}</span>
-                  <span className={`text-right ${stock.changePercent >= 0 ? "text-bull" : "text-bear"}`}>
-                    {formatChangePercent(stock.changePercent)}
-                  </span>
-                </div>
-              ))}
+              {summary.turnoverOver100BStocks.length > 0 ? (
+                summary.turnoverOver100BStocks.map((stock) => (
+                  <div key={stock.symbol} className="grid grid-cols-[minmax(0,1fr)_72px_62px] items-center gap-3">
+                    <span className="truncate">{stock.name}</span>
+                    <span className="text-right">{formatTurnover(stock.turnover)}</span>
+                    <span className={`text-right ${stock.changePercent >= 0 ? "text-bull" : "text-bear"}`}>
+                      {formatChangePercent(stock.changePercent)}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-stone-400">{copy.empty}</p>
+              )}
             </div>
           </div>
         </div>

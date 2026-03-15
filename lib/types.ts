@@ -60,6 +60,7 @@ export type IndustryHeatItem = {
 
 export type AShareHeatSummary = {
   top20: MarketTopTurnoverStock[];
+  turnoverOver100BStocks: MarketTopTurnoverStock[];
   industryRanking: IndustryHeatItem[];
   top3Industries: IndustryHeatItem[];
   turnoverOver100BCount: number;
