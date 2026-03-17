@@ -1,4 +1,4 @@
-import YahooFinance from "yahoo-finance2";
+﻿import YahooFinance from "yahoo-finance2";
 import type { AssetSnapshot, Candle } from "@/lib/types";
 import type { AssetDefinition, MarketDataProvider } from "@/lib/providers/base";
 
@@ -15,6 +15,37 @@ type CachedMiniSeries = {
 type SymbolResolution = {
   primary: string;
   fallbacks?: string[];
+};
+
+type YahooChartResult = {
+  candidate: string;
+  chart: {
+    meta?: {
+      regularMarketPrice?: number;
+      regularMarketTime?: Date;
+      exchangeTimezoneName?: string;
+      regularMarketPreviousClose?: number;
+      chartPreviousClose?: number;
+    };
+    quotes: Array<{
+      date: Date;
+      open?: number | null;
+      high?: number | null;
+      low?: number | null;
+      close?: number | null;
+      volume?: number | null;
+    }>;
+  };
+};
+
+type YahooQuoteResult = {
+  candidate: string;
+  quote: {
+    regularMarketPrice?: number;
+    regularMarketPreviousClose?: number;
+    regularMarketTime?: Date | string;
+    exchangeTimezoneName?: string;
+  };
 };
 
 const CACHE_TTL_MS = 60_000;
@@ -115,7 +146,7 @@ async function fetchChartWithFallback(
   symbol: string,
   interval: "1d" | "1wk",
   period1: Date,
-) {
+): Promise<YahooChartResult> {
   const resolution = normalizeSymbol(symbol);
   const candidates = [resolution.primary, ...(resolution.fallbacks ?? [])];
   let lastError: unknown;
@@ -130,13 +161,45 @@ async function fetchChartWithFallback(
         },
         { validateResult: false },
       );
-      return { candidate, chart: chart as { meta: any; quotes: Array<any> } };
+      return { candidate, chart: chart as YahooChartResult["chart"] };
     } catch (error) {
       lastError = error;
     }
   }
 
   throw lastError instanceof Error ? lastError : new Error(`No data source available for ${symbol}`);
+}
+
+async function fetchQuoteWithFallback(symbol: string): Promise<YahooQuoteResult> {
+  const resolution = normalizeSymbol(symbol);
+  const candidates = [resolution.primary, ...(resolution.fallbacks ?? [])];
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    try {
+      const quote = await yahooFinance.quote(candidate, {
+        fields: ["regularMarketPrice", "regularMarketPreviousClose", "regularMarketTime", "exchangeTimezoneName"],
+      }, { validateResult: false });
+      return { candidate, quote: quote as YahooQuoteResult["quote"] };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(`No quote source available for ${symbol}`);
+}
+
+function toDate(value: Date | string | undefined, fallback: Date) {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return fallback;
 }
 
 async function loadSnapshot(definition: AssetDefinition): Promise<AssetSnapshot> {
@@ -151,9 +214,10 @@ async function loadSnapshot(definition: AssetDefinition): Promise<AssetSnapshot>
   const weeklyStart = new Date();
   weeklyStart.setUTCFullYear(weeklyStart.getUTCFullYear() - 5);
 
-  const [dailyResult, weeklyResult] = await Promise.all([
+  const [dailyResult, weeklyResult, quoteResult] = await Promise.all([
     fetchChartWithFallback(definition.symbol, "1d", dailyStart),
     fetchChartWithFallback(definition.symbol, "1wk", weeklyStart),
+    fetchQuoteWithFallback(definition.symbol),
   ]);
 
   const dailyCandles = normalizeCandleSeries(
@@ -176,14 +240,26 @@ async function loadSnapshot(definition: AssetDefinition): Promise<AssetSnapshot>
   const latest = dailyCandles[dailyCandles.length - 1];
   const previous = dailyCandles[dailyCandles.length - 2];
   const meta = dailyResult.chart.meta ?? {};
-  const rawPrice = typeof meta.regularMarketPrice === "number" ? meta.regularMarketPrice : latest.close;
+  const quote = quoteResult.quote ?? {};
+  const rawPrice = typeof quote.regularMarketPrice === "number"
+    ? quote.regularMarketPrice
+    : typeof meta.regularMarketPrice === "number"
+      ? meta.regularMarketPrice
+      : latest.close;
+  const rawPreviousClose = typeof quote.regularMarketPreviousClose === "number"
+    ? quote.regularMarketPreviousClose
+    : typeof meta.regularMarketPreviousClose === "number"
+      ? meta.regularMarketPreviousClose
+      : typeof meta.chartPreviousClose === "number"
+        ? meta.chartPreviousClose
+        : previous.close;
   const price = Number(rawPrice.toFixed(2));
-  const previousClose = Number(previous.close.toFixed(2));
+  const previousClose = Number(rawPreviousClose.toFixed(2));
   const change = Number((price - previousClose).toFixed(2));
   const changePercent = previousClose === 0 ? 0 : Number((((price - previousClose) / previousClose) * 100).toFixed(2));
 
   const latestDate = new Date(`${latest.time}T00:00:00Z`);
-  const regularMarketTime = meta.regularMarketTime instanceof Date ? meta.regularMarketTime : latestDate;
+  const regularMarketTime = toDate(quote.regularMarketTime, meta.regularMarketTime ?? latestDate);
   const updatedAt = regularMarketTime.getTime() < latestDate.getTime()
     ? latestDate.toISOString()
     : regularMarketTime.toISOString();
@@ -195,7 +271,11 @@ async function loadSnapshot(definition: AssetDefinition): Promise<AssetSnapshot>
     change,
     changePercent,
     updatedAt,
-    marketTimeZone: typeof meta.exchangeTimezoneName === "string" ? meta.exchangeTimezoneName : "UTC",
+    marketTimeZone: typeof quote.exchangeTimezoneName === "string"
+      ? quote.exchangeTimezoneName
+      : typeof meta.exchangeTimezoneName === "string"
+        ? meta.exchangeTimezoneName
+        : "UTC",
     dailyCandles,
     weeklyCandles,
   };
@@ -238,3 +318,5 @@ export class RealMarketDataProvider implements MarketDataProvider {
     return value;
   }
 }
+
+
