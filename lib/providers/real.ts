@@ -26,6 +26,11 @@ type YahooChartResult = {
       exchangeTimezoneName?: string;
       regularMarketPreviousClose?: number;
       chartPreviousClose?: number;
+      currentTradingPeriod?: {
+        regular?: {
+          end?: Date;
+        };
+      };
     };
     quotes: Array<{
       date: Date;
@@ -202,6 +207,26 @@ function toDate(value: Date | string | undefined, fallback: Date) {
   return fallback;
 }
 
+function trimIncompleteDailyCandle(
+  candles: Candle[],
+  marketTime?: Date | string,
+  regularEnd?: Date,
+) {
+  if (candles.length < 2 || !marketTime || !regularEnd) {
+    return candles;
+  }
+
+  const marketDate = formatDate(toDate(marketTime, regularEnd));
+  const latest = candles[candles.length - 1];
+  const marketMoment = toDate(marketTime, regularEnd);
+
+  if (latest.time === marketDate && marketMoment.getTime() < regularEnd.getTime()) {
+    return candles.slice(0, -1);
+  }
+
+  return candles;
+}
+
 async function loadSnapshot(definition: AssetDefinition): Promise<AssetSnapshot> {
   const now = Date.now();
   const cached = snapshotCache.get(definition.symbol);
@@ -220,11 +245,20 @@ async function loadSnapshot(definition: AssetDefinition): Promise<AssetSnapshot>
     fetchQuoteWithFallback(definition.symbol),
   ]);
 
-  const dailyCandles = normalizeCandleSeries(
-    dailyResult.chart.quotes
-      .map(toCandle)
-      .filter((candle): candle is Candle => candle !== null),
-    "1d",
+  const quote = quoteResult.quote ?? {};
+  const meta = dailyResult.chart.meta ?? {};
+  const marketTime = quote.regularMarketTime ?? meta.regularMarketTime;
+  const regularEnd = meta.currentTradingPeriod?.regular?.end;
+
+  const dailyCandles = trimIncompleteDailyCandle(
+    normalizeCandleSeries(
+      dailyResult.chart.quotes
+        .map(toCandle)
+        .filter((candle): candle is Candle => candle !== null),
+      "1d",
+    ),
+    marketTime,
+    regularEnd,
   );
   const weeklyCandles = normalizeCandleSeries(
     weeklyResult.chart.quotes
@@ -239,8 +273,6 @@ async function loadSnapshot(definition: AssetDefinition): Promise<AssetSnapshot>
 
   const latest = dailyCandles[dailyCandles.length - 1];
   const previous = dailyCandles[dailyCandles.length - 2];
-  const meta = dailyResult.chart.meta ?? {};
-  const quote = quoteResult.quote ?? {};
   const rawPrice = typeof quote.regularMarketPrice === "number"
     ? quote.regularMarketPrice
     : typeof meta.regularMarketPrice === "number"
@@ -259,7 +291,7 @@ async function loadSnapshot(definition: AssetDefinition): Promise<AssetSnapshot>
   const changePercent = previousClose === 0 ? 0 : Number((((price - previousClose) / previousClose) * 100).toFixed(2));
 
   const latestDate = new Date(`${latest.time}T00:00:00Z`);
-  const regularMarketTime = toDate(quote.regularMarketTime, meta.regularMarketTime ?? latestDate);
+  const regularMarketTime = toDate(marketTime, meta.regularMarketTime ?? latestDate);
   const updatedAt = regularMarketTime.getTime() < latestDate.getTime()
     ? latestDate.toISOString()
     : regularMarketTime.toISOString();
@@ -318,5 +350,3 @@ export class RealMarketDataProvider implements MarketDataProvider {
     return value;
   }
 }
-
-

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef } from "react";
 import {
@@ -162,7 +162,7 @@ export function CandlesChart({ candles, title }: CandlesChartProps) {
       <p className="mb-3 text-base font-medium text-ink">{title}</p>
       <div ref={priceContainerRef} />
       <div className="mt-4">
-        <p className="mb-2 text-sm text-stone-500">???</p>
+        <p className="mb-2 text-sm text-stone-500">成交量</p>
         <div ref={volumeContainerRef} />
       </div>
       <div className="mt-4">
@@ -172,3 +172,4 @@ export function CandlesChart({ candles, title }: CandlesChartProps) {
     </div>
   );
 }
+
