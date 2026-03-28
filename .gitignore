@@ -16,3 +16,8 @@ South_Gas_Company_Tenders_ITP_2026-03-12.csv
 South_Gas_Company_Tenders_ITP_2026-03-12.xml
 run_binance_order.ps1
 trade_btc_long.py
+itp_dump_debug.html
+itp_dump_manual.html
+sgc_tender_page.html
+sgc_page_*.html
+.data/

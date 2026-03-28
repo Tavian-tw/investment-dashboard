@@ -52,3 +52,61 @@ Recommended free deployment path:
 4. Deploy with the free plan.
 
 GitHub Pages is not suitable for this project because it uses Next.js server routes and API endpoints.
+
+## SGC Weekly Tender Monitor
+
+This repository now includes a weekly `South Gas Company` tender monitor designed for Vercel Cron.
+
+### What It Does
+
+- Fetches the latest tender list from the official South Gas Company page: `https://sgc.oil.gov.iq/?tender`
+- Pulls each tender detail page and normalizes the title, tender number, publish date, summary, and source link
+- Exposes a manual report endpoint at `/api/sgc/report`
+- Exposes a weekly cron endpoint at `/api/cron/sgc-weekly`
+- Runs automatically every Saturday at `06:00 UTC`, which is `09:00` in Baghdad
+- Can send weekly email reports through Resend
+- Can persist the previous snapshot locally for development, or back to GitHub for production diff tracking
+
+### Why It Uses The Official SGC Site
+
+The ITP tender portal uses a human verification layer, which is not reliable for unattended Vercel cron jobs.
+For stable weekly automation, this monitor uses the official South Gas Company tender source.
+
+### API Endpoints
+
+- Manual report: `/api/sgc/report`
+- Manual report and persist snapshot: `/api/sgc/report?persist=1`
+- Manual report, persist snapshot, and send email: `/api/sgc/report?persist=1&email=1`
+- Weekly cron route: `/api/cron/sgc-weekly`
+
+### Environment Variables
+
+Optional email settings:
+
+```env
+RESEND_API_KEY=your_resend_api_key
+SGC_EMAIL_FROM=monitor@your-domain.com
+SGC_EMAIL_TO=2374564535@qq.com,wanghonghai@antonoil.com
+```
+
+Optional cron secret for manual triggering:
+
+```env
+CRON_SECRET=your_random_secret
+```
+
+Optional GitHub-backed snapshot persistence:
+
+```env
+GITHUB_TOKEN=your_github_token
+GITHUB_REPO_OWNER=your_github_username_or_org
+GITHUB_REPO_NAME=your_repo_name
+GITHUB_REPO_BRANCH=main
+GITHUB_STATE_PATH=data/sgc-tenders-state.json
+```
+
+Notes:
+
+- If GitHub persistence is not configured, local development writes the snapshot to `.data/sgc-tenders-state.json`.
+- On Vercel, local filesystem writes are not durable, so GitHub persistence is recommended if you want change detection between weekly runs.
+- If email settings are not configured, the cron route still runs and returns JSON, but it skips email delivery.
