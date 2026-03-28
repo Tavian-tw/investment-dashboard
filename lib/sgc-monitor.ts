@@ -128,7 +128,8 @@ async function fetchHtml(url: string): Promise<string> {
     throw new Error(`Failed to fetch ${url}: ${response.status}`);
   }
 
-  return response.text();
+  const buffer = await response.arrayBuffer();
+  return new TextDecoder("utf-8").decode(buffer);
 }
 
 function parseListingPage(html: string): Array<{ pageId: number; url: string; title: string }> {
